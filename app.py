@@ -1,6 +1,6 @@
 # ===============================================================
-# app.py - FINAL SUBMISSION VERSION WITH BASE64 AUTH
-# To run locally: python -m streamlit run app.py
+# app.py - FINAL SUBMISSION VERSION (REVISED)
+# To run: python -m streamlit run app.py
 # ===============================================================
 
 import streamlit as st
@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 import json
 import pandas as pd
 import plotly.express as px
-import base64 # Importa a biblioteca para decodificação
+import base64
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(
@@ -32,42 +32,49 @@ hide_st_style = """
 st.markdown(hide_st_style, unsafe_allow_html=True)
 
 
-# --- 1. SETUP AND AUTHENTICATION (BASE64 METHOD) ---
+# --- 1. SETUP AND AUTHENTICATION ---
 
+# This unified block handles authentication for both local and deployed environments.
 try:
-    # Get secrets from Streamlit Secrets
-    google_api_key = st.secrets["GOOGLE_API_KEY"]
-    gcp_key_base64 = st.secrets["GCP_KEY_BASE64"] # Pega o segredo codificado
+    # Check if running in Streamlit Cloud (where st.secrets is available)
+    if "GCP_KEY_BASE64" in st.secrets:
+        print("Authenticating using Streamlit Secrets (Base64)...")
+        google_api_key = st.secrets["GOOGLE_API_KEY"]
+        gcp_key_base64 = st.secrets["GCP_KEY_BASE64"]
+        
+        # Decode the Base64 secret
+        gcp_key_bytes = gcp_key_base64.encode("utf-8")
+        key_bytes = base64.b64decode(gcp_key_bytes)
+        gcp_key_content = key_bytes.decode("utf-8")
+    
+    # Fallback to local .env file for local development
+    else:
+        print("Authenticating using local .env file...")
+        load_dotenv()
+        google_api_key = os.getenv("GOOGLE_API_KEY")
+        
+        # Use the local encoder script to create this file
+        with open('key_base64.txt', 'r') as f:
+            gcp_key_base64 = f.read().strip()
 
-    # --- DECODING THE BASE64 SECRET ---
-    # 1. Get the Base64 string and convert it back to bytes
-    gcp_key_bytes = gcp_key_base64.encode("utf-8")
-    # 2. Decode the Base64 bytes to get the original JSON bytes
-    key_bytes = base64.b64decode(gcp_key_bytes)
-    # 3. Decode the original JSON bytes into a string
-    gcp_key_content = key_bytes.decode("utf-8")
-    
-    # Configure Gemini API key
+        # Decode the Base64 secret
+        gcp_key_bytes = gcp_key_base64.encode("utf-8")
+        key_bytes = base64.b64decode(gcp_key_bytes)
+        gcp_key_content = key_bytes.decode("utf-8")
+
+    # Configure Gemini and BigQuery clients with the loaded credentials
     genai.configure(api_key=google_api_key)
-    
-    # Load the decoded JSON key content into a dictionary
     gcp_key_json = json.loads(gcp_key_content)
-    
-    # Get the project_id from the key file's content
     project_id = gcp_key_json['project_id']
-    
-    # Pass both the credentials AND the project_id to the client
     credentials = service_account.Credentials.from_service_account_info(gcp_key_json)
     client_bq = bigquery.Client(credentials=credentials, project=project_id)
     
     st.session_state.auth_success = True
-    print("Authentication successful using Base64 decoded key!")
+    print("Authentication successful!")
 
-except KeyError as e:
-    st.error(f"Authentication Error: Secret '{e.args[0]}' not found. Please check your Streamlit Secrets. Did you name it GCP_KEY_BASE64?")
-    st.stop()
 except Exception as e:
-    st.error(f"Authentication Error. The Base64 key might be corrupted. Details: {e}")
+    st.error(f"Authentication Error. Please check your secrets/credentials setup. Details: {e}")
+    st.session_state.auth_success = False
     st.stop()
     
 # --- SYSTEM INSTRUCTION FOR THE LLM ---
@@ -96,9 +103,9 @@ Possible values for "display_format": "currency_usd", "percentage", "number".
 IMPORTANT: To group data by month and year from a TIMESTAMP column like 'created_at', use the function FORMAT_TIMESTAMP('%Y-%m', created_at). NEVER use the strftime function.
 """
 
-# Configure the Gemini Model if authentication was successful
+# Continue only if authentication was successful
 if 'auth_success' in st.session_state and st.session_state.auth_success:
-    model = genai.GenerativeModel("gemini-2.5-pro", system_instruction=SYSTEM_INSTRUCTION)
+    model = genai.GenerativeModel("gemini-1.5-flash", system_instruction=SYSTEM_INSTRUCTION)
     
     # --- 2. BACKEND LOGIC (HELPER FUNCTIONS) ---
 
@@ -114,6 +121,7 @@ if 'auth_success' in st.session_state and st.session_state.auth_success:
     def get_assistant_response(user_prompt, history_tuple):
         """
         This function encapsulates the backend logic. It calls the LLM and, if required, BigQuery.
+        The function is cached to save API calls for repeated questions.
         """
         history = [json.loads(item) for item in history_tuple]
         try:
@@ -143,41 +151,4 @@ if 'auth_success' in st.session_state and st.session_state.auth_success:
         except json.JSONDecodeError:
             return {"action": "ERROR", "content": f"The model responded in an unexpected format: '{response.text}'"}
         except Exception as e:
-            return {"action": "ERROR", "content": f"An error occurred: {e}"}
-
-    def process_and_display_prompt(prompt):
-        """Processes a prompt from the chat input or a button and displays the results in the UI."""
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
-
-        with st.chat_message("assistant"):
-            with st.spinner("Analyzing data... Please wait."):
-                history_for_cache = tuple(json.dumps(item) for item in st.session_state.history_for_api)
-                response_data = get_assistant_response(prompt, history_for_cache)
-                
-                action = response_data.get("action")
-                
-                if action == "CLARIFY":
-                    message_content = response_data["content"]
-                    st.markdown(message_content)
-                    st.session_state.messages.append({"role": "assistant", "content": message_content})
-
-                elif action == "DATA":
-                    # ... (resto da sua lógica de exibição, que já está perfeita) ...
-                    data_content = response_data["content"]
-                    display_format = response_data.get("display_format", "number")
-                    # ...
-                
-                else: # Handle errors
-                    message_content = f"An error occurred: {response_data.get('content')}"
-                    st.error(message_content)
-                    st.session_state.messages.append({"role": "assistant", "content": message_content})
-        
-        st.session_state.history_for_api.append({"role": "user", "parts": [prompt]})
-        st.session_state.history_for_api.append({"role": "model", "parts": [json.dumps(response_data)]})
-
-    # --- 3. STREAMLIT UI ---
-    
-    st.title("LLM Crutch 🤖: Your Data Analysis Assistant")
-    # ... (o resto da sua UI, que já está perfeita) ...
+            return {"action": "ERROR", "content": f"An error occurred:
