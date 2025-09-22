@@ -1,5 +1,5 @@
 # ===============================================================
-# app.py - FINAL SUBMISSION VERSION (REVISED)
+# app.py - FINAL SUBMISSION VERSION (CORRECTED)
 # To run: python -m streamlit run app.py
 # ===============================================================
 
@@ -32,37 +32,29 @@ hide_st_style = """
 st.markdown(hide_st_style, unsafe_allow_html=True)
 
 
-# --- 1. SETUP AND AUTHENTICATION ---
+# --- 1. SETUP AND AUTHENTICATION (BASE64 METHOD) ---
 
-# This unified block handles authentication for both local and deployed environments.
 try:
     # Check if running in Streamlit Cloud (where st.secrets is available)
     if "GCP_KEY_BASE64" in st.secrets:
         print("Authenticating using Streamlit Secrets (Base64)...")
         google_api_key = st.secrets["GOOGLE_API_KEY"]
         gcp_key_base64 = st.secrets["GCP_KEY_BASE64"]
-        
-        # Decode the Base64 secret
-        gcp_key_bytes = gcp_key_base64.encode("utf-8")
-        key_bytes = base64.b64decode(gcp_key_bytes)
-        gcp_key_content = key_bytes.decode("utf-8")
     
     # Fallback to local .env file for local development
     else:
-        print("Authenticating using local .env file...")
+        print("Authenticating using local .env and key_base64.txt file...")
         load_dotenv()
         google_api_key = os.getenv("GOOGLE_API_KEY")
-        
-        # Use the local encoder script to create this file
         with open('key_base64.txt', 'r') as f:
             gcp_key_base64 = f.read().strip()
 
-        # Decode the Base64 secret
-        gcp_key_bytes = gcp_key_base64.encode("utf-8")
-        key_bytes = base64.b64decode(gcp_key_bytes)
-        gcp_key_content = key_bytes.decode("utf-8")
-
-    # Configure Gemini and BigQuery clients with the loaded credentials
+    # Decode the Base64 secret to get the original JSON content
+    gcp_key_bytes = gcp_key_base64.encode("utf-8")
+    key_bytes = base64.b64decode(gcp_key_bytes)
+    gcp_key_content = key_bytes.decode("utf-8")
+    
+    # Configure Gemini and BigQuery clients
     genai.configure(api_key=google_api_key)
     gcp_key_json = json.loads(gcp_key_content)
     project_id = gcp_key_json['project_id']
@@ -121,7 +113,6 @@ if 'auth_success' in st.session_state and st.session_state.auth_success:
     def get_assistant_response(user_prompt, history_tuple):
         """
         This function encapsulates the backend logic. It calls the LLM and, if required, BigQuery.
-        The function is cached to save API calls for repeated questions.
         """
         history = [json.loads(item) for item in history_tuple]
         try:
@@ -151,4 +142,100 @@ if 'auth_success' in st.session_state and st.session_state.auth_success:
         except json.JSONDecodeError:
             return {"action": "ERROR", "content": f"The model responded in an unexpected format: '{response.text}'"}
         except Exception as e:
-            return {"action": "ERROR", "content": f"An error occurred:
+            # --- CORREÇÃO APLICADA AQUI ---
+            return {"action": "ERROR", "content": f"An error occurred: {e}"}
+
+    def process_and_display_prompt(prompt):
+        """Processes a prompt from the chat input or a button and displays the results in the UI."""
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        with st.chat_message("assistant"):
+            with st.spinner("Analyzing data... Please wait."):
+                history_for_cache = tuple(json.dumps(item) for item in st.session_state.history_for_api)
+                response_data = get_assistant_response(prompt, history_for_cache)
+                
+                action = response_data.get("action")
+                
+                if action == "CLARIFY":
+                    message_content = response_data["content"]
+                    st.markdown(message_content)
+                    st.session_state.messages.append({"role": "assistant", "content": message_content})
+
+                elif action == "DATA":
+                    data_content = response_data["content"]
+                    display_format = response_data.get("display_format", "number")
+
+                    if not data_content:
+                        st.warning("The query returned no results.")
+                    else:
+                        df = pd.DataFrame(data_content)
+                        if df.shape[0] == 1 and df.shape[1] == 1:
+                            st.markdown("#### Key Metric")
+                            kpi_value = df.iloc[0, 0]
+                            kpi_label = df.columns[0].replace("_", " ").title()
+                            
+                            if display_format == "percentage": formatted_value = f"{kpi_value:,.2f}%"
+                            elif display_format == "currency_usd": formatted_value = f"${kpi_value:,.2f}"
+                            else: formatted_value = f"{kpi_value:,}"
+                            st.metric(label=kpi_label, value=formatted_value)
+                        else:
+                            col1, col2 = st.columns([1, 1.2])
+                            with col1:
+                                st.markdown("#### Detailed Data")
+                                st.dataframe(df)
+                            with col2:
+                                st.markdown("#### Chart")
+                                try:
+                                    x_axis, y_axis = df.columns[0], df.columns[1]
+                                    fig = px.bar(df, x=x_axis, y=y_axis, title=f'{y_axis.replace("_", " ").title()} by {x_axis.replace("_", " ").title()}', template="seaborn")
+                                    st.plotly_chart(fig, use_container_width=True)
+                                except Exception:
+                                    st.warning("Could not generate a chart for this data.")
+                    
+                    with st.expander("View the generated SQL query"):
+                        st.code(response_data["query_used"], language="sql")
+                    
+                    message_content = "[Displaying data and charts]"
+                    st.session_state.messages.append({"role": "assistant", "content": message_content})
+                
+                else: # Handle errors
+                    message_content = f"An error occurred: {response_data.get('content')}"
+                    st.error(message_content)
+                    st.session_state.messages.append({"role": "assistant", "content": message_content})
+        
+        st.session_state.history_for_api.append({"role": "user", "parts": [prompt]})
+        st.session_state.history_for_api.append({"role": "model", "parts": [json.dumps(response_data)]})
+
+    # --- 3. STREAMLIT UI ---
+
+    st.title("LLM Crutch 🤖: Your Data Analysis Assistant")
+    st.caption("A project for the Kaggle BigQuery AI Hackathon by Douglas Menezes")
+    
+    st.sidebar.title("Analysis Suggestions 💡")
+    st.sidebar.markdown("Click a button to ask a sample question!")
+    if st.sidebar.button("📊 Monthly Profit (Chart)"): process_and_display_prompt("Show me the monthly profit evolution for the year 2023.")
+    if st.sidebar.button("🏆 Top 5 Profitable Brands (Table)"): process_and_display_prompt("What are the 5 most profitable brands?")
+    if st.sidebar.button("💰 Annual Growth (KPI %)") : process_and_display_prompt("What was the percentage revenue growth between 2022 and 2023?")
+    if st.sidebar.button("🤯 Top Spenders Analysis (Complex JOIN)"): process_and_display_prompt("List the top 3 users (with their emails) who spent the most on 'Jeans' products.")
+    
+    st.sidebar.markdown("---")
+    
+    st.sidebar.title("Controls")
+    if st.sidebar.button("🧹 Clear Conversation"):
+        st.session_state.messages, st.session_state.history_for_api = [], []
+        st.rerun()
+
+    st.sidebar.markdown("---")
+    st.sidebar.info("**About:** 'LLM Crutch' is a conversational BI tool using Google's Gemini AI to translate natural language into SQL queries, executed on BigQuery.")
+
+    if "messages" not in st.session_state:
+        st.session_state.messages, st.session_state.history_for_api = [], []
+
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+
+    if prompt := st.chat_input("Ask your own question about the data..."):
+        process_and_display_prompt(prompt)
