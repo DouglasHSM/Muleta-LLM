@@ -12,6 +12,35 @@ from dotenv import load_dotenv
 import json
 import pandas as pd
 import plotly.express as px
+import base64 # <-- Adicione esta importação
+
+try:
+    # Get secrets from Streamlit Secrets
+    google_api_key = st.secrets["GOOGLE_API_KEY"]
+    gcp_key_base64 = st.secrets["GCP_KEY_BASE64"] # <-- Pega o novo segredo codificado
+
+    # --- DECODIFICAÇÃO DO SEGREDO ---
+    # 1. Pega a string Base64 e a converte de volta para bytes
+    gcp_key_bytes = gcp_key_base64.encode("utf-8")
+    # 2. Decodifica os bytes Base64 para os bytes do JSON original
+    key_bytes = base64.b64decode(gcp_key_bytes)
+    # 3. Decodifica os bytes do JSON para a string de texto original
+    gcp_key_content = key_bytes.decode("utf-8")
+    
+    # Daqui em diante, o código é o mesmo de antes
+    genai.configure(api_key=google_api_key)
+    
+    gcp_key_json = json.loads(gcp_key_content)
+    project_id = gcp_key_json['project_id']
+    credentials = service_account.Credentials.from_service_account_info(gcp_key_json)
+    client_bq = bigquery.Client(credentials=credentials, project=project_id)
+    
+    st.session_state.auth_success = True
+    print("Authentication successful using Base64 decoded key!")
+
+except Exception as e:
+    st.error(f"Authentication Error. Please check your Streamlit Secrets (Base64). Details: {e}")
+    st.stop()
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(
