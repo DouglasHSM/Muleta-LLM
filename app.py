@@ -97,7 +97,7 @@ IMPORTANT: To group data by month and year from a TIMESTAMP column like 'created
 
 # Continue only if authentication was successful
 if 'auth_success' in st.session_state and st.session_state.auth_success:
-    model = genai.GenerativeModel("gemini-1.5-flash", system_instruction=SYSTEM_INSTRUCTION)
+    model = genai.GenerativeModel("gemini-2.5-pro", system_instruction=SYSTEM_INSTRUCTION)
     
     # --- 2. BACKEND LOGIC (HELPER FUNCTIONS) ---
 
