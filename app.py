@@ -38,23 +38,37 @@ load_dotenv()
 
 # This authentication block is for local development (using ADC)
 # It will be gracefully skipped in environments where ADC is not set up, like Streamlit Cloud
-try:
-    # Use st.secrets for Streamlit Cloud deployment, fallback to local ADC
-    if "gcp_service_account" in st.secrets:
-        # Load credentials from Streamlit Secrets
-        gcp_key_json = st.secrets["gcp_service_account"]
-        credentials = service_account.Credentials.from_service_account_info(gcp_key_json)
-        client_bq = bigquery.Client(credentials=credentials, project=credentials.project_id)
-        st.session_state.auth_method = "Streamlit Secrets"
-    else:
-        # Fallback to Application Default Credentials for local development
-        client_bq = bigquery.Client()
-        st.session_state.auth_method = "Local ADC"
-    
-    print(f"BigQuery Client initialized successfully via {st.session_state.auth_method}!")
+# app.py
 
+# --- 1. SETUP AND AUTHENTICATION ---
+try:
+    # Load credentials from Streamlit Secrets
+    # NOTE: In Streamlit Cloud, use st.secrets, not os.getenv
+    google_api_key = st.secrets["GOOGLE_API_KEY"]
+    gcp_key_content = st.secrets["GCP_KEY"]
+
+    # Configure Gemini API key
+    genai.configure(api_key=google_api_key)
+    
+    # Load the JSON key content into a dictionary
+    gcp_key_json = json.loads(gcp_key_content)
+    
+    # --- THE FIX IS HERE ---
+    # 1. Get the project_id directly from the key file's content
+    project_id = gcp_key_json['project_id']
+    
+    # 2. Pass both the credentials AND the project_id to the client
+    credentials = service_account.Credentials.from_service_account_info(gcp_key_json)
+    client_bq = bigquery.Client(credentials=credentials, project=project_id)
+    
+    st.session_state.auth_success = True
+    print("Authentication successful in Streamlit Cloud!")
+
+except KeyError as e:
+    st.error(f"Authentication Error: Secret '{e.args[0]}' not found. Please check your Streamlit Secrets.")
+    st.stop()
 except Exception as e:
-    st.error(f"Error authenticating with Google Cloud. Details: {e}")
+    st.error(f"Authentication Error. Details: {e}")
     st.stop()
 
 
