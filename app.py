@@ -210,7 +210,7 @@ if 'auth_success' in st.session_state and st.session_state.auth_success:
 
     # --- 3. STREAMLIT UI ---
 
-    st.title("LLM Crutch 🤖: Your Data Analysis Assistant")
+    st.title("LLM Crutch | Your Data Analysis Assistant")
     st.caption("A project for the Kaggle BigQuery AI Hackathon by Douglas Menezes")
     
     st.sidebar.title("Analysis Suggestions 💡")
