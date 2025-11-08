@@ -1,6 +1,6 @@
 # ===============================================================
-# app.py - FINAL SUBMISSION VERSION (CORRECTED)
-# To run: python -m streamlit run app.py
+# app.py - VERSÃO ATUALIZADA (PT-BR + PROMPT MELHORADO)
+# Para rodar: python -m streamlit run app.py
 # ===============================================================
 
 import streamlit as st
@@ -14,15 +14,15 @@ import pandas as pd
 import plotly.express as px
 import base64
 
-# --- PAGE CONFIGURATION ---
+# --- CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(
-    page_title="QueryMaster AI for BigQuery",
+    page_title="Muleta para LLM | QueryMaster",
     page_icon="🤖",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# --- CSS TO HIDE STREAMLIT'S DEFAULT MENU AND FOOTER ---
+# --- CSS PARA ESCONDER O MENU E RODAPÉ ---
 hide_st_style = """
             <style>
             #MainMenu {visibility: hidden;}
@@ -32,29 +32,31 @@ hide_st_style = """
 st.markdown(hide_st_style, unsafe_allow_html=True)
 
 
-# --- 1. SETUP AND AUTHENTICATION (BASE64 METHOD) ---
-
+# --- 1. AUTENTICAÇÃO E CONFIGURAÇÃO ---
 try:
-    # Check if running in Streamlit Cloud (where st.secrets is available)
+    # Procura pelos segredos do Streamlit Cloud (quando está no ar)
     if "GCP_KEY_BASE64" in st.secrets:
-        print("Authenticating using Streamlit Secrets (Base64)...")
+        print("Autenticando via Streamlit Secrets (Base64)...")
         google_api_key = st.secrets["GOOGLE_API_KEY"]
         gcp_key_base64 = st.secrets["GCP_KEY_BASE64"]
+        gcp_key_bytes = gcp_key_base64.encode("utf-8")
+        key_bytes = base64.b64decode(gcp_key_bytes)
+        gcp_key_content = key_bytes.decode("utf-8")
     
-    # Fallback to local .env file for local development
+    # Fallback para o .env local (para quando você roda no seu PC)
     else:
-        print("Authenticating using local .env and key_base64.txt file...")
+        print("Autenticando via .env local...")
         load_dotenv()
         google_api_key = os.getenv("GOOGLE_API_KEY")
+        # Assume que você tem o arquivo key_base64.txt para desenvolvimento local
         with open('key_base64.txt', 'r') as f:
             gcp_key_base64 = f.read().strip()
+        
+        gcp_key_bytes = gcp_key_base64.encode("utf-8")
+        key_bytes = base64.b64decode(gcp_key_bytes)
+        gcp_key_content = key_bytes.decode("utf-8")
 
-    # Decode the Base64 secret to get the original JSON content
-    gcp_key_bytes = gcp_key_base64.encode("utf-8")
-    key_bytes = base64.b64decode(gcp_key_bytes)
-    gcp_key_content = key_bytes.decode("utf-8")
-    
-    # Configure Gemini and BigQuery clients
+    # Configura os clientes da API
     genai.configure(api_key=google_api_key)
     gcp_key_json = json.loads(gcp_key_content)
     project_id = gcp_key_json['project_id']
@@ -62,19 +64,19 @@ try:
     client_bq = bigquery.Client(credentials=credentials, project=project_id)
     
     st.session_state.auth_success = True
-    print("Authentication successful!")
+    print("Autenticação realizada com sucesso!")
 
 except Exception as e:
-    st.error(f"Authentication Error. Please check your secrets/credentials setup. Details: {e}")
+    st.error(f"Erro de Autenticação. Verifique seus segredos/credenciais. Detalhes: {e}")
     st.session_state.auth_success = False
     st.stop()
     
-# --- SYSTEM INSTRUCTION FOR THE LLM ---
+# --- SYSTEM INSTRUCTION ATUALIZADO (EM PT-BR E MAIS INTELIGENTE) ---
 SYSTEM_INSTRUCTION = """
-You are 'QueryMaster', an AI Data Analyst specializing in the Google BigQuery 'TheLook' e-commerce dataset.
-Your mission is to transform business questions into valid BigQuery Standard SQL queries.
+Você é o 'QueryMaster', um Analista de Dados IA especialista no dataset de e-commerce 'TheLook' do Google BigQuery.
+Sua missão é transformar perguntas de negócio em português em queries SQL (dialeto BigQuery Standard SQL).
 
-You will use the following main schema:
+O schema principal que você usará é:
 CREATE TABLE `bigquery-public-data.thelook_ecommerce.order_items` (
   order_id STRING, user_id STRING, product_id STRING, sale_price NUMERIC, created_at TIMESTAMP
 );
@@ -85,24 +87,26 @@ CREATE TABLE `bigquery-public-data.thelook_ecommerce.users` (
   id STRING, email STRING, first_name STRING, last_name STRING
 );
 
-Your response MUST be a valid JSON object.
-The JSON must have the keys "action" and "content".
-- For vague questions, use: {"action": "CLARIFY", "content": "Your clarification question here."}
-- To generate SQL, use: {"action": "EXECUTE", "content": "Your SQL query here.", "display_format": "..."}
+Suas respostas DEVEM ser um objeto JSON válido com as chaves "action", "content" e, para EXECUTE, "display_format".
+- Para perguntas vagas: {"action": "CLARIFY", "content": "Sua pergunta de esclarecimento aqui."}
+- Para gerar o SQL: {"action": "EXECUTE", "content": "Sua query SQL aqui.", "display_format": "..."}
 
-Possible values for "display_format": "currency_usd", "percentage", "number".
+Valores possíveis para "display_format": "currency_brl", "percentage", "number", "text".
 
-IMPORTANT: To group data by month and year from a TIMESTAMP column like 'created_at', use the function FORMAT_TIMESTAMP('%Y-%m', created_at). NEVER use the strftime function.
+REGRAS DE SQL IMPORTANTES:
+1. Para agrupar por mês/ano (ex: "lucro mensal"), use FORMAT_TIMESTAMP('%Y-%m', created_at). NUNCA use strftime.
+2. **REGRA DE SUPERLATIVO:** Se a pergunta pedir por um único item (ex: "qual o *melhor*", "o *mais* lucrativo", "o *top 1*" produto/marca/etc), sua query DEVE usar `ORDER BY ... DESC LIMIT 1`. Isso é um KPI, não um gráfico.
+3. Para valores monetários, use o formato 'currency_brl'. Para percentagens, use 'percentage'.
 """
 
-# Continue only if authentication was successful
+# Continua apenas se a autenticação foi bem-sucedida
 if 'auth_success' in st.session_state and st.session_state.auth_success:
-    model = genai.GenerativeModel("gemini-2.5-pro", system_instruction=SYSTEM_INSTRUCTION)
+    model = genai.GenerativeModel("gemini-1.5-flash", system_instruction=SYSTEM_INSTRUCTION)
     
-    # --- 2. BACKEND LOGIC (HELPER FUNCTIONS) ---
+    # --- 2. LÓGICA DO BACK-END (FUNÇÕES AUXILIARES) ---
 
     def clean_json_from_string(text):
-        """Extracts a JSON string from within a Markdown code block."""
+        """Extrai uma string JSON de dentro de um bloco de código Markdown."""
         start_index = text.find('{')
         end_index = text.rfind('}')
         if start_index != -1 and end_index != -1:
@@ -111,9 +115,7 @@ if 'auth_success' in st.session_state and st.session_state.auth_success:
 
     @st.cache_data
     def get_assistant_response(user_prompt, history_tuple):
-        """
-        This function encapsulates the backend logic. It calls the LLM and, if required, BigQuery.
-        """
+        """Encapsula a lógica do back-end: chama o LLM e, se necessário, o BigQuery."""
         history = [json.loads(item) for item in history_tuple]
         try:
             chat_session = model.start_chat(history=history)
@@ -140,19 +142,18 @@ if 'auth_success' in st.session_state and st.session_state.auth_success:
             return response_json
 
         except json.JSONDecodeError:
-            return {"action": "ERROR", "content": f"The model responded in an unexpected format: '{response.text}'"}
+            return {"action": "ERROR", "content": f"O modelo respondeu num formato inesperado: '{response.text}'"}
         except Exception as e:
-            # --- CORREÇÃO APLICADA AQUI ---
-            return {"action": "ERROR", "content": f"An error occurred: {e}"}
+            return {"action": "ERROR", "content": f"Ocorreu um erro: {e}"}
 
     def process_and_display_prompt(prompt):
-        """Processes a prompt from the chat input or a button and displays the results in the UI."""
+        """Processa um prompt (do chat ou botão) e exibe os resultados na UI."""
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
 
         with st.chat_message("assistant"):
-            with st.spinner("Analyzing data... Please wait."):
+            with st.spinner("Analisando os dados... Por favor, aguarde."):
                 history_for_cache = tuple(json.dumps(item) for item in st.session_state.history_for_api)
                 response_data = get_assistant_response(prompt, history_for_cache)
                 
@@ -168,74 +169,86 @@ if 'auth_success' in st.session_state and st.session_state.auth_success:
                     display_format = response_data.get("display_format", "number")
 
                     if not data_content:
-                        st.warning("The query returned no results.")
+                        st.warning("A consulta não retornou resultados.")
                     else:
                         df = pd.DataFrame(data_content)
-                        if df.shape[0] == 1 and df.shape[1] == 1:
-                            st.markdown("#### Key Metric")
-                            kpi_value = df.iloc[0, 0]
-                            kpi_label = df.columns[0].replace("_", " ").title()
-                            
-                            if display_format == "percentage": formatted_value = f"{kpi_value:,.2f}%"
-                            elif display_format == "currency_usd": formatted_value = f"${kpi_value:,.2f}"
+                        # --- LÓGICA DE EXIBIÇÃO ATUALIZADA ---
+                        # Se o resultado for 1 linha E 1 ou 2 colunas (ex: nome e valor), trate como KPI
+                        if df.shape[0] == 1 and (df.shape[1] == 1 or df.shape[1] == 2):
+                            st.markdown("#### Métrica Principal")
+                            # Se tiver 2 colunas (ex: 'produto_nome', 'lucro_total'), usa uma como label e outra como valor
+                            if df.shape[1] == 2:
+                                kpi_label = df.columns[0]
+                                kpi_value = df.iloc[0, 1]
+                                st.markdown(f"**{kpi_label.replace('_', ' ').title()}:** {df.iloc[0, 0]}")
+                            # Se tiver 1 coluna, usa o nome da coluna como label
+                            else:
+                                kpi_label = df.columns[0].replace("_", " ").title()
+                                kpi_value = df.iloc[0, 0]
+
+                            # Formatação (agora em R$)
+                            if display_format == "percentage": formatted_value = f"{kpi_value:,.2f}%".replace(",", "X").replace(".", ",").replace("X", ".")
+                            elif display_format == "currency_brl": formatted_value = f"R$ {kpi_value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
                             else: formatted_value = f"{kpi_value:,}"
+                            
                             st.metric(label=kpi_label, value=formatted_value)
+                        
+                        # Se for uma lista/tabela, mostra o gráfico e os dados
                         else:
                             col1, col2 = st.columns([1, 1.2])
                             with col1:
-                                st.markdown("#### Detailed Data")
+                                st.markdown("#### Dados Detalhados")
                                 st.dataframe(df)
                             with col2:
-                                st.markdown("#### Chart")
+                                st.markdown("#### Gráfico")
                                 try:
                                     x_axis, y_axis = df.columns[0], df.columns[1]
-                                    fig = px.bar(df, x=x_axis, y=y_axis, title=f'{y_axis.replace("_", " ").title()} by {x_axis.replace("_", " ").title()}', template="seaborn")
+                                    fig = px.bar(df, x=x_axis, y=y_axis, title=f'{y_axis.replace("_", " ").title()} por {x_axis.replace("_", " ").title()}', template="seaborn")
                                     st.plotly_chart(fig, use_container_width=True)
                                 except Exception:
-                                    st.warning("Could not generate a chart for this data.")
+                                    st.warning("Não foi possível gerar um gráfico para estes dados.")
                     
-                    with st.expander("View the generated SQL query"):
+                    with st.expander("Ver a consulta SQL gerada"):
                         st.code(response_data["query_used"], language="sql")
                     
-                    message_content = "[Displaying data and charts]"
+                    message_content = "[Exibindo dados e gráficos]"
                     st.session_state.messages.append({"role": "assistant", "content": message_content})
                 
-                else: # Handle errors
-                    message_content = f"An error occurred: {response_data.get('content')}"
+                else: # Lida com erros
+                    message_content = f"Ocorreu um erro: {response_data.get('content')}"
                     st.error(message_content)
                     st.session_state.messages.append({"role": "assistant", "content": message_content})
         
         st.session_state.history_for_api.append({"role": "user", "parts": [prompt]})
         st.session_state.history_for_api.append({"role": "model", "parts": [json.dumps(response_data)]})
 
-    # --- 3. STREAMLIT UI ---
+    # --- 3. INTERFACE DO STREAMLIT (EM PT-BR) ---
 
-    st.title("LLM Crutch | Your Data Analysis Assistant")
-    st.caption("A project for the Kaggle BigQuery AI Hackathon by Douglas Menezes")
+    st.title("Muleta para LLM 🤖: Seu Assistente de Análise de Dados")
+    st.caption(f"Um projeto de Douglas Menezes (Construído para o Hackathon Kaggle BigQuery AI)")
     
-    st.sidebar.title("Analysis Suggestions 💡")
-    st.sidebar.markdown("Click a button to ask a sample question!")
-    if st.sidebar.button("📊 Monthly Profit (Chart)"): process_and_display_prompt("Show me the monthly profit evolution for the year 2023.")
-    if st.sidebar.button("🏆 Top 5 Profitable Brands (Table)"): process_and_display_prompt("What are the 5 most profitable brands?")
-    if st.sidebar.button("💰 Annual Growth (KPI %)") : process_and_display_prompt("What was the percentage revenue growth between 2022 and 2023?")
-    if st.sidebar.button("🤯 Top Spenders Analysis (Complex JOIN)"): process_and_display_prompt("List the top 3 users (with their emails) who spent the most on 'Jeans' products.")
+    st.sidebar.title("Sugestões de Análise 💡")
+    st.sidebar.markdown("Clique em um botão para fazer uma pergunta de teste!")
+    if st.sidebar.button("📊 Lucro Mensal (Gráfico)"): process_and_display_prompt("Me mostre a evolução mensal do lucro no ano de 2023.")
+    if st.sidebar.button("🏆 Top 5 Marcas Lucrativas (Tabela)"): process_and_display_prompt("Quais são as 5 marcas que mais nos deram lucro?")
+    if st.sidebar.button("💰 Crescimento Anual (KPI %)") : process_and_display_prompt("Qual foi o crescimento percentual da receita entre 2022 e 2023?")
+    if st.sidebar.button("🤯 Top Clientes (JOIN Complexo)"): process_and_display_prompt("Liste os 3 usuários (com seus e-mails) que mais gastaram em produtos da categoria 'Jeans'.")
     
     st.sidebar.markdown("---")
     
-    st.sidebar.title("Controls")
-    if st.sidebar.button("🧹 Clear Conversation"):
+    st.sidebar.title("Controles")
+    if st.sidebar.button("🧹 Limpar Conversa"):
         st.session_state.messages, st.session_state.history_for_api = [], []
         st.rerun()
 
     st.sidebar.markdown("---")
-    st.sidebar.info("**About:** 'LLM Crutch' is a conversational BI tool using Google's Gemini AI to translate natural language into SQL queries, executed on BigQuery.")
+    st.sidebar.info("**Sobre:** 'Muleta para LLM' é uma ferramenta de BI conversacional que usa IA (Gemini) para traduzir linguagem natural em queries SQL, executadas no BigQuery.")
 
     if "messages" not in st.session_state:
         st.session_state.messages, st.session_state.history_for_api = [], []
 
     for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+        with st.chat_message(message["role"]): st.markdown(message["content"])
 
-    if prompt := st.chat_input("Ask your own question about the data..."):
+    if prompt := st.chat_input("Faça sua própria pergunta sobre os dados..."):
         process_and_display_prompt(prompt)
