@@ -16,7 +16,7 @@ import base64
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(
-    page_title="Muleta para LLM | QueryMaster",
+    page_title="BI Conversacional",
     page_icon="🤖",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -101,7 +101,7 @@ REGRAS DE SQL IMPORTANTES:
 
 # Continua apenas se a autenticação foi bem-sucedida
 if 'auth_success' in st.session_state and st.session_state.auth_success:
-    model = genai.GenerativeModel("gemini-2.5-pro", system_instruction=SYSTEM_INSTRUCTION)
+    model = genai.GenerativeModel("gemini-3-pro-preview", system_instruction=SYSTEM_INSTRUCTION)
     
     # --- 2. LÓGICA DO BACK-END (FUNÇÕES AUXILIARES) ---
 
@@ -224,7 +224,7 @@ if 'auth_success' in st.session_state and st.session_state.auth_success:
 
     # --- 3. INTERFACE DO STREAMLIT (EM PT-BR) ---
 
-    st.title("Muleta para LLM 🤖: Seu Assistente de Análise de Dados")
+    st.title(" </ Seu Assistente de Análise de Dados >")
     st.caption(f"Um projeto de Douglas Menezes (Construído para o Hackathon Kaggle BigQuery AI)")
     
     st.sidebar.title("Sugestões de Análise 💡")
