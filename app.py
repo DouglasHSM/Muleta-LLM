@@ -101,7 +101,7 @@ REGRAS DE SQL IMPORTANTES:
 
 # Continua apenas se a autenticação foi bem-sucedida
 if 'auth_success' in st.session_state and st.session_state.auth_success:
-    model = genai.GenerativeModel("gemini-3-pro-preview", system_instruction=SYSTEM_INSTRUCTION)
+    model = genai.GenerativeModel("gemini-2.5-pro", system_instruction=SYSTEM_INSTRUCTION)
     
     # --- 2. LÓGICA DO BACK-END (FUNÇÕES AUXILIARES) ---
 
