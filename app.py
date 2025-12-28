@@ -12,6 +12,9 @@ import json
 import pandas as pd
 import base64
 from streamlit_echarts import st_echarts
+import streamlit as st
+from cerebras.cloud.sdk import Cerebras
+from languages import TRANSLATIONS
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(
@@ -335,64 +338,78 @@ if 'auth_success' in st.session_state and st.session_state.auth_success:
 
     # --- 3. INTERFACE DO STREAMLIT ---
 
-    st.title(" </ BI Conversacional >")
-    st.caption(f"Powered by Cerebras Inference")
-
-    st.markdown("### 🛍️ Analise dados de Varejo com IA")
-    
-    st.info("""
-    **O que é isso?** Este é um Analista de BI movido pelo **Llama 3.3-70B**. 
-    Ele está conectado ao banco de dados público **'TheLook E-Commerce'**.
-    """)
-
-    with st.expander("🔎 Ver detalhes dos dados disponíveis (Schema)"):
-        st.markdown("""
-        Você pode fazer perguntas sobre:
-        - **📦 Produtos:** Custos, categorias, marcas (Levi's, Calvin Klein, etc).
-        - **💰 Vendas:** Receita, lucro, ticket médio, evolução temporal.
-        - **👥 Usuários:** Localização, gênero, quantidade de compras.
-        
-        *Exemplo: "Qual a marca que mais lucrou em 2023?"*
-        """)
-        
-    st.divider()
-    
-    st.sidebar.title("Sugestões de Análise 💡")
-    st.sidebar.markdown("Clique em um botão para fazer uma pergunta de teste!")
-    # 1. Teste de Linha (Temporal + Cálculo de Lucro)
-    if st.sidebar.button("📈 Lucro Mensal "): 
-        process_and_display_prompt("Me mostre a evolução mensal do lucro total (sale_price - cost) no ano de 2023.")
-    
-    # 2. Teste de Barra (Ranking)
-    if st.sidebar.button("📊 Top Marcas"): 
-        process_and_display_prompt("Quais as 5 marcas com maior receita total em Dólar? Mostre em barras.")
-    
-    # 3. Teste de Pizza (Distribuição - Testa a coluna 'gender' que arrumamos)
-    if st.sidebar.button("🍕 Usuários por Gênero"): 
-        process_and_display_prompt("Qual a distribuição percentual de usuários por Gênero (gender)?")
-
-    # 4. Teste de Dispersão (Correlação - Testa o Eixo X numérico)
-    if st.sidebar.button("💠 Custo x Preço"): 
-        process_and_display_prompt("Liste apenas o custo e o preço de venda de 200 produtos aleatórios para eu ver a correlação de dispersão.")
-
-    # 5. Teste de Tabela (Dados brutos)
-    if st.sidebar.button("📋 Categorias"): 
-        process_and_display_prompt("Liste todas as categorias de produtos e a quantidade de itens vendidos em cada uma.")
-    
-    st.sidebar.markdown("---")
-    
-    st.sidebar.title("Controles")
-    if st.sidebar.button("🧹 Limpar Conversa"):
-        st.session_state.messages, st.session_state.history_for_api = [], []
-        st.rerun()
-
+    # ==========================================================
+    # 🚑 CORREÇÃO: INICIALIZA O ESTADO ANTES DE TUDO
+    # ==========================================================
     if "messages" not in st.session_state:
         st.session_state.messages = []
     if "history_for_api" not in st.session_state:
         st.session_state.history_for_api = []
+    # ==========================================================
+    
+    # --- SELETOR DE IDIOMA (NOVA FEATURE) ---
+    lang_option = st.sidebar.selectbox("Language / Idioma", ["🇧🇷 Português", "🇺🇸 English"])
+    
+    if "Português" in lang_option:
+        lang = "pt"
+    else:
+        lang = "en"
+        
+    # Carrega os textos do idioma selecionado
+    t = TRANSLATIONS[lang]
 
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]): st.markdown(message["content"])
+    # --- TÍTULOS E CONTEXTO (USANDO AS VARIÁVEIS 't') ---
+    st.title(t["title"])
+    st.caption(t["caption"])
+    
+    st.markdown(t["welcome_title"])
+    st.info(t["welcome_text"])
 
-    if prompt := st.chat_input("Faça sua própria pergunta sobre os dados..."):
+    with st.expander(t["expander_title"]):
+        # Nota: O conteúdo do expander pode ser mantido fixo ou criar chaves para ele também
+        if lang == "pt":
+            st.markdown("""
+            - **📦 Produtos:** Custos, categorias, marcas.
+            - **💰 Vendas:** Receita, lucro, evolução.
+            """)
+        else:
+            st.markdown("""
+            - **📦 Products:** Costs, categories, brands.
+            - **💰 Sales:** Revenue, profit, trends.
+            """)
+        
+    st.divider()
+
+    # --- BARRA LATERAL (BOTÕES TRADUZIDOS) ---
+    st.sidebar.title(t["sidebar_header"])
+    st.sidebar.markdown(t["sidebar_desc"])
+    
+    # Observe que usamos t['chave'] para o rótulo do botão E para o prompt enviado
+    if st.sidebar.button(t["btn_line"]): 
+        process_and_display_prompt(t["prompt_line"])
+    
+    if st.sidebar.button(t["btn_bar"]): 
+        process_and_display_prompt(t["prompt_bar"])
+    
+    if st.sidebar.button(t["btn_pie"]): 
+        process_and_display_prompt(t["prompt_pie"])
+
+    if st.sidebar.button(t["btn_scatter"]): 
+        process_and_display_prompt(t["prompt_scatter"])
+
+    if st.sidebar.button(t["btn_table"]): 
+        process_and_display_prompt(t["prompt_table"])
+    
+    st.sidebar.markdown("---")
+    
+    st.sidebar.title(t["controls"])
+    if st.sidebar.button(t["btn_clear"]):
+        st.session_state.messages = []
+        st.session_state.history_for_api = []
+        st.rerun()
+
+    # ... (Renderização do histórico mantém igual) ...
+
+    # Input do Chat Traduzido
+    if prompt := st.chat_input(t["chat_placeholder"]):
         process_and_display_prompt(prompt)
