@@ -5,3 +5,4 @@ db-dtypes
 python-dotenv
 plotly
 cerebras-cloud-sdk
+streamlit-echarts
