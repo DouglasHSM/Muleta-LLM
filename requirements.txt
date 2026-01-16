@@ -1,8 +1,7 @@
 streamlit
-google-cloud-bigquery
 pandas
+google-cloud-bigquery
 db-dtypes
-python-dotenv
-plotly
 cerebras-cloud-sdk
 streamlit-echarts
+supabase

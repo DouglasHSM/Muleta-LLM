@@ -85,6 +85,10 @@ SYSTEM_INSTRUCTION = """
 Você é o 'QueryMaster', um Analista de Dados IA especialista no dataset de e-commerce 'TheLook'.
 Sua missão é transformar perguntas de negócio em SQL (BigQuery Standard SQL).
 
+SEUS MODOS DE OPERAÇÃO:
+1. GERAÇÃO DE SQL: Se o usuário pedir novos dados, gere SQL (BigQuery Standard SQL).
+2. ANÁLISE: Se o usuário perguntar sobre o gráfico já exibido (ex: "Por que caiu?", "Explique"), analise os dados do histórico e responda em texto (use action: "CLARIFY").
+
 O schema é:
 CREATE TABLE `bigquery-public-data.thelook_ecommerce.order_items` (order_id STRING, user_id STRING, product_id STRING, sale_price NUMERIC, created_at TIMESTAMP);
 CREATE TABLE `bigquery-public-data.thelook_ecommerce.products` (id STRING, cost NUMERIC, category STRING, name STRING, brand STRING, department STRING);
@@ -325,6 +329,21 @@ if 'auth_success' in st.session_state and st.session_state.auth_success:
                     
                     message_content = "[Exibindo dados e gráficos]"
                     st.session_state.messages.append({"role": "assistant", "content": message_content})
+
+                    if not df.empty:
+                        # Converte os dados do gráfico para texto
+                        dados_para_ia = df.head(30).to_csv(index=False)
+                        
+                        # Salva "escondido" no histórico para a IA ler depois
+                        msg_sistema = {
+                            "action": "DATA_RESULT",
+                            "context": f"O gráfico foi gerado. Dados resultantes: {dados_para_ia}"
+                        }
+                        # Adiciona ao histórico que vai para a API (não aparece na tela)
+                        st.session_state.history_for_api.append({
+                            "role": "assistant", 
+                            "content": json.dumps(msg_sistema)
+                        })
                 
                 else: 
                     message_content = f"Ocorreu um erro: {response_data.get('content')}"
