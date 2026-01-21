@@ -1,5 +1,5 @@
-streamlit==1.40.0
-pandas==2.1.4
+streamlit
+pandas
 google-cloud-bigquery
 db-dtypes
 cerebras-cloud-sdk
