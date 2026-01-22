@@ -5,3 +5,5 @@ db-dtypes
 cerebras-cloud-sdk
 streamlit-echarts
 supabase
+python-dotenv
+google-auth
