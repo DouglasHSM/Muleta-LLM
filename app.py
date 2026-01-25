@@ -378,6 +378,7 @@ if 'auth_success' in st.session_state and st.session_state.auth_success:
     t = TRANSLATIONS[lang]
 
     # --- TÍTULOS E CONTEXTO (USANDO AS VARIÁVEIS 't') ---
+    st.sidebar.warning("🚧 **Ambiente de Demonstração**\nEsta é uma versão Beta para validação de conceito. Pode apresentar instabilidade.")
     st.title(t["title"])
     st.caption(t["caption"])
     
